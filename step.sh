@@ -1,4 +1,8 @@
 #!/bin/bash
 set -ex
 
-kscript step.kts
+THIS_SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+#cd "${THIS_SCRIPTDIR}"
+
+kscript $THIS_SCRIPTDIR/step.kts

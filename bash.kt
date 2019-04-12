@@ -1,4 +1,3 @@
-package bash
 
 import java.io.*
 import kotlin.system.exitProcess
@@ -9,36 +8,6 @@ data class BashResult(val exitCode: Int, val stdout: Iterable<String>, val stder
 
     fun serr() = stderr.joinToString("\n").trim()
 }
-
-
-fun evalBash(cmd: String, showOutput: Boolean = false,
-             redirectStdout: File? = null, redirectStderr: File? = null, wd: File? = null): BashResult {
-
-    try {
-
-        // optionally prefix script with working directory change
-        val cmd = (if (wd != null) "cd '${wd.absolutePath}'\n" else "") + cmd
-
-
-        var pb = ProcessBuilder("/bin/bash", "-c", cmd) //.inheritIO();
-        pb.directory(File("."));
-        var p = pb.start();
-
-        val outputGobbler = StreamGobbler(p.getInputStream(), if (showOutput) System.out else null)
-        val errorGobbler = StreamGobbler(p.getErrorStream(), if (showOutput) System.err else null)
-
-        // kick them off
-        errorGobbler.start()
-        outputGobbler.start()
-
-        // any error???
-        val exitVal = p.waitFor()
-        return BashResult(exitVal, outputGobbler.sb.lines(), errorGobbler.sb.lines())
-    } catch (t: Throwable) {
-        throw RuntimeException(t)
-    }
-}
-
 
 internal class StreamGobbler(var inStream: InputStream, val printStream: PrintStream?) : Thread() {
     var sb = StringBuilder()
@@ -56,12 +25,39 @@ internal class StreamGobbler(var inStream: InputStream, val printStream: PrintSt
         }
     }
 
-
     val output: String get() = sb.toString()
 }
 
 
-object ShellUtils {
+object ShellCmd {
+    fun evalBash(pCmd: String,
+                 showOutput: Boolean = false,
+                 redirectStdout: File? = null,
+                 redirectStderr: File? = null,
+                 wd: File? = null): BashResult {
+        try {
+
+            // optionally prefix script with working directory change
+            val cmd = (if (wd != null) "cd '${wd.absolutePath}'\n" else "") + pCmd
+
+            var pb = ProcessBuilder("/bin/bash", "-c", cmd) //.inheritIO();
+            pb.directory(File("."));
+            var p = pb.start();
+
+            val outputGobbler = StreamGobbler(p.getInputStream(), if (showOutput) System.out else null)
+            val errorGobbler = StreamGobbler(p.getErrorStream(), if (showOutput) System.err else null)
+
+            // kick them off
+            errorGobbler.start()
+            outputGobbler.start()
+
+            // any error???
+            val exitVal = p.waitFor()
+            return BashResult(exitVal, outputGobbler.sb.lines(), errorGobbler.sb.lines())
+        } catch (t: Throwable) {
+            throw RuntimeException(t)
+        }
+    }
 
     fun isInPath(tool: String) = evalBash("which $tool").sout().trim().isNotBlank()
 
@@ -71,18 +67,23 @@ object ShellUtils {
     fun envman(env: kotlin.Pair<kotlin.String, kotlin.Any>) = {
 
         val defCmd = "envman add -key ${env.first} --value \"${env.second}\""
-        evalBash(defCmd, true)
+        evalBash(defCmd, true).sout()
     }
 
-    fun git(command: String, vararg args: String) = {
-
-        val defCmd = "echo $command ${args.joinToString(separator = " ")}"
-        evalBash(defCmd, true)
+    fun cd(dest: String) = {
+        val defCmd = "cd '${dest}'"
+        evalBash(defCmd, true).sout()
+    }
+    
+    fun git(command: String, vararg args: String)  = {
+        val defCmd = "git $command ${args.joinToString(separator = " ")}"
+        println(defCmd)
+        evalBash(defCmd, true).sout()
     }
 }
 
 
-public inline fun stopIfNot(value: Boolean, lazyMessage: () -> Any) {
+inline fun stopIfNot(value: Boolean, lazyMessage: () -> Any) {
     if (!value) {
         System.err.println("[ERROR] " + lazyMessage().toString())
         exitProcess(1)
