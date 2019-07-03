@@ -1,6 +1,6 @@
 #!/usr/bin/env kscript
 
-//DEPS com.taskworld.kraph:kraph:0.4.1 com.github.kittinunf.fuel:fuel:2.0.1 com.github.kittinunf.fuel:fuel-rxjava:2.0.1 com.google.code.gson:gson:2.8.5 log4j:log4j:1.2.14
+//DEPS me.lazmaid.kraph:kraph:0.6.0 com.google.code.gson:gson:2.8.5 log4j:log4j:1.2.14 com.github.kittinunf.fuel:fuel:2.1.0 com.github.kittinunf.fuel:fuel-rxjava:2.1.0
 //INCLUDE data.kt
 //INCLUDE bash.kt
 

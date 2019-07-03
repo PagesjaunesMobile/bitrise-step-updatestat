@@ -5,7 +5,7 @@ import com.github.kittinunf.fuel.rx.rxObject
 import com.github.kittinunf.fuel.rx.rxResponseString
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
-import com.taskworld.kraph.Kraph
+import me.lazmaid.kraph.Kraph
 import io.reactivex.Single
 
 
