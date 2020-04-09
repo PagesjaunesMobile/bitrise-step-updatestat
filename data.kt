@@ -19,58 +19,79 @@ data class RepoResponse (
 }
 
 data class Repository(@SerializedName("id") val id: String)
-data class Data(@SerializedName("repository")  val repository: Repository)
+data class Data(@SerializedName("project")  val repository: Repository)
+data class MergeRequest(@SerializedName("id") val id: String,
+                        @SerializedName("iid") val iid: String,
+                        @SerializedName("project_id") val projectId: String,
+                        @SerializedName("title") val title: String) {
+    class Deserializer : ResponseDeserializable<MergeRequest> {
 
-val token = System.getenv("GITHUB_AUTH_TOKEN")
-val url = "https://api.github.com/graphql"
+        override fun deserialize(content: String): MergeRequest? = Gson().fromJson(content, MergeRequest::class.java)
+
+    }
+}
+
+val token = System.getenv("GITLAB_AUTH_TOKEN")
+val urlGraph = "https://gitlab.solocal.com/api/graphql"
+val urlApi = "https://gitlab.solocal.com/api/v4/projects"
 //val url = "http://localhost"
 
-fun getRepoID(name:String, owner: String): Single<String> {
+fun getRepoID(path:String): Single<String> {
     val reqRepo = Kraph {
         query {
-            fieldObject("repository", args = mapOf("name" to name, "owner" to owner))
+            fieldObject("project", args = mapOf("fullPath" to path))
             {
                 field("id")
             }
         }
     }
 
-    return url.httpPost()
+    return urlGraph.httpPost()
             .header("content-type" to "application/json", "Accept" to "application/json")
             .authentication()
             .bearer(token)
             .body(reqRepo.toRequestString())
             .rxObject(RepoResponse.Deserializer())
-            .map { it.get().data.repository.id }
+            .map {
+                val repoPattern = ":.*/(\\d+)".toRegex()
+                val matches = repoPattern.find( it.get().data.repository.id)
+                val (repoId) = matches!!.destructured
+                repoId
+            }
 }
 
 
-fun createPullRequest(name:String, owner: String, title: String, featBranch: String, comment: String): Single<String> {
-    return getRepoID(name, owner)
+fun createPullRequest(path:String, title: String, featBranch: String): Single<String> {
+
+    return getRepoID(path)
             .flatMap { repoId ->
                 if (repoId != null)
                     println(repoId)
 
-                val prRequest = Kraph {
-                    mutation {
-                        func("createPullRequest", args = mapOf("baseRefName" to "develop",
-                                "headRefName" to featBranch,
-                                "repositoryId" to repoId,
-                                "title" to title,
-                                "body" to comment))
-                        {
-                            fieldObject("pullRequest") {
-                                field("id")
-                            }
-                        }
-                    }
-                }
+                val prRequest =  mapOf("target_branch" to "develop",
+                        "source_branch" to featBranch,
+                        "id" to repoId,
+                        "title" to title,
+                        "remove_source_branch" to true)
 
+                val url = "$urlApi/$repoId/merge_requests"
+                println(Gson().toJson(prRequest))
+                println(".")
                 url.httpPost()
+                        .header("content-type" to "application/json", "Accept" to "application/json")
                         .authentication()
                         .bearer(token)
-                        .body(prRequest.toRequestString())
-                        .rxResponseString()
+                        .body(Gson().toJson(prRequest))
+                        .rxObject(MergeRequest.Deserializer())
+                        .flatMap { it ->
+                            val url = "$urlApi/$repoId/merge_requests/${it.get().iid}/notes"
+                            println(".")
+                            url.httpPost()
+                                    .header("content-type" to "application/json", "Accept" to "application/json")
+                                    .authentication()
+                                    .bearer(token)
+                                    .body("{\"body\":\"code review OK\"}")
+                                    .rxResponseString()
+                        }
             }
-
 }

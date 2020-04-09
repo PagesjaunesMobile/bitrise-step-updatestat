@@ -54,7 +54,11 @@ ShellCmd.git("add", ".")
 ShellCmd.git("commit", "-am", title ).invoke()
 ShellCmd.git("push", "origin", featBranch ).invoke()
 
-createPullRequest(System.getenv("BITRISE_APP_TITLE"), System.getenv("BITRISEIO_GIT_REPOSITORY_OWNER"), title, featBranch, "code review OK").doOnSuccess { r->
+val repoPattern = ":(.*)\\.git".toRegex()
+  val matches = repoPattern.find(System.getenv("GIT_REPOSITORY_URL"))
+val (repo) = matches!!.destructured
+println(repo)
+createPullRequest( repo, "update PDM v$version", featBranch).doOnSuccess { r->
     print(r)
 }.blockingGet()
 
