@@ -31,7 +31,7 @@ data class MergeRequest(@SerializedName("id") val id: String,
     }
 }
 
-val token = System.getenv("GITLAB_AUTH_TOKEN")
+val token = System.getenv("GITLAB_API_TOKEN")
 val urlGraph = "https://gitlab.solocal.com/api/graphql"
 val urlApi = "https://gitlab.solocal.com/api/v4/projects"
 //val url = "http://localhost"

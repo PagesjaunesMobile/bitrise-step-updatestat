@@ -75,6 +75,11 @@ object ShellCmd {
         evalBash(defCmd, true).sout()
     }
     
+    fun ls(dest: String) = {
+        val defCmd = "ls '${dest}'"
+        println(evalBash(defCmd, true))
+    }
+    
     fun git(command: String, vararg args: String)  = {
         val defCmd = "git $command ${args.joinToString(separator = " ")}"
         println(defCmd)
