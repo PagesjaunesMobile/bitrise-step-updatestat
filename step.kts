@@ -36,7 +36,7 @@ copyStatsFiles(origin, destStat)
 val message = System.getenv("BITRISE_GIT_MESSAGE")
 val version = getVersionPDM(readStat(destStat))
 val featBranch="feat/updateStat_" + version
-val title = "'feat(stat): update PDM $version"
+val title = "'feat(stat): update PDM $version'"
   println(title)
 
 ShellCmd.git("checkout", "-b", featBranch ).invoke()
