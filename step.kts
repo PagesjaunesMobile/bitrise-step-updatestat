@@ -13,7 +13,7 @@ import kotlin.system.exitProcess
 
 fun getVersionPDM(doc: String): String {
 
-  val regex = """"version":.?"([^"]+)",""".toRegex()
+  val regex = """"version":.?"([^"]+)",?""".toRegex()
   var found = regex.find(doc)
     val (match) = found!!.destructured
     return match
