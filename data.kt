@@ -72,6 +72,7 @@ fun createPullRequest(path:String, title: String, featBranch: String): Single<St
                         "source_branch" to featBranch,
                         "id" to repoId,
                         "title" to title,
+                        "approvals_before_merge" to 0,
                         "remove_source_branch" to true)
 
                 val url = "$urlApi/$repoId/merge_requests"
