@@ -1,12 +1,11 @@
 import com.github.kittinunf.fuel.core.ResponseDeserializable
 import com.github.kittinunf.fuel.core.extensions.authentication
+import com.github.kittinunf.fuel.coroutines.awaitObjectResult
 import com.github.kittinunf.fuel.httpPost
-import com.github.kittinunf.fuel.rx.rxObject
-import com.github.kittinunf.fuel.rx.rxResponseString
+import com.github.kittinunf.result.map
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import me.lazmaid.kraph.Kraph
-import io.reactivex.Single
 
 
 data class RepoResponse (
@@ -36,7 +35,7 @@ val urlGraph = "https://gitlab.solocal.com/api/graphql"
 val urlApi = "https://gitlab.solocal.com/api/v4/projects"
 //val url = "http://localhost"
 
-fun getRepoID(path:String): Single<String> {
+suspend fun getRepoID(path:String): List<String> {
     val reqRepo = Kraph {
         query {
             fieldObject("project", args = mapOf("fullPath" to path))
@@ -45,30 +44,35 @@ fun getRepoID(path:String): Single<String> {
             }
         }
     }
-
+    println("ReqRepo ${reqRepo.toGraphQueryString()}")
     return urlGraph.httpPost()
             .header("content-type" to "application/json", "Accept" to "application/json")
             .authentication()
             .bearer(token)
             .body(reqRepo.toRequestString())
-            .rxObject(RepoResponse.Deserializer())
-            .map {
-                val repoPattern = ":.*/(\\d+)".toRegex()
-                val matches = repoPattern.find( it.get().data.repository.id)
-                val (repoId) = matches!!.destructured
-                repoId
-            }
+            .awaitObjectResult(RepoResponse.Deserializer())
+            .fold(
+                    { body ->
+                        val repoPattern = ":.*/(\\d+)".toRegex()
+                        println(body.data)
+                        val matches = repoPattern.find( body.data.repository.id)
+                        val (repoId) = matches!!.destructured
+                        listOf(repoId) },
+                    { error ->
+                        println("An error of type ${error.exception} happened: ${error.message}")
+                        emptyList()
+                    }
+            )
 }
 
-
-fun createPullRequest(path:String, title: String, featBranch: String): Single<String> {
+ suspend fun createPullRequest(path:String, title: String, featBranch: String): List<String> {
 
     return getRepoID(path)
-            .flatMap { repoId ->
+            .map{ repoId ->
                 if (repoId != null)
                     println(repoId)
 
-                val prRequest =  mapOf("target_branch" to "develop",
+                val prRequest = mapOf("target_branch" to "develop",
                         "source_branch" to featBranch,
                         "id" to repoId,
                         "title" to title,
@@ -76,6 +80,7 @@ fun createPullRequest(path:String, title: String, featBranch: String): Single<St
                         "remove_source_branch" to true)
 
                 val url = "$urlApi/$repoId/merge_requests"
+                println("Here $url")
                 println(Gson().toJson(prRequest))
                 println(".")
                 url.httpPost()
@@ -83,16 +88,19 @@ fun createPullRequest(path:String, title: String, featBranch: String): Single<St
                         .authentication()
                         .bearer(token)
                         .body(Gson().toJson(prRequest))
-                        .rxObject(MergeRequest.Deserializer())
-                        .flatMap { it ->
-                            val url = "$urlApi/$repoId/merge_requests/${it.get().iid}/notes"
+                        .awaitObjectResult(MergeRequest.Deserializer())
+                        .fold(
+                                { body ->
+                            val url = "$urlApi/$repoId/merge_requests/${body.iid}/notes"
                             println(".")
                             url.httpPost()
                                     .header("content-type" to "application/json", "Accept" to "application/json")
                                     .authentication()
                                     .bearer(token)
                                     .body("{\"body\":\"code review OK\"}")
-                                    .rxResponseString()
-                        }
+                                    .responseString().toString()
+                        },
+                                { error -> "An error of type ${error.exception} happened: ${error.message}" }
+                        )
             }
 }
