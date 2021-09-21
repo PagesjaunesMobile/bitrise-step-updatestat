@@ -1,6 +1,6 @@
 #!/usr/bin/env kscript
 
-//DEPS me.lazmaid.kraph:kraph:0.7.0 com.google.code.gson:gson:2.8.6 com.github.kittinunf.fuel:fuel:2.3.1 com.github.kittinunf.fuel:fuel-coroutines:2.3.1
+//DEPS me.lazmaid.kraph:kraph:0.7.0 com.squareup.moshi:moshi:1.8.0,com.squareup.moshi:moshi-adapters:1.8.0,com.squareup.moshi:moshi-kotlin:1.8.0 com.github.kittinunf.fuel:fuel:2.3.1 com.github.kittinunf.fuel:fuel-coroutines:2.3.1 com.github.kittinunf.fuel:fuel-moshi:2.3.1
 //INCLUDE data.kt
 //INCLUDE bash.kt
 

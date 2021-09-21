@@ -1,34 +1,35 @@
-import com.github.kittinunf.fuel.core.ResponseDeserializable
 import com.github.kittinunf.fuel.core.extensions.authentication
 import com.github.kittinunf.fuel.coroutines.awaitObjectResult
 import com.github.kittinunf.fuel.httpPost
-import com.github.kittinunf.result.map
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
+import com.github.kittinunf.fuel.moshi.moshiDeserializerOf
+import com.squareup.moshi.*
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import me.lazmaid.kraph.Kraph
 
 
+@JsonClass(generateAdapter = true)
 data class RepoResponse (
-        @SerializedName("data") val data : Data) {
-    class Deserializer : ResponseDeserializable<RepoResponse> {
+        @Json(name = "data") val data : Data)
 
-        override fun deserialize(content: String): RepoResponse? = Gson().fromJson(content, RepoResponse::class.java)
+@JsonClass(generateAdapter = true)
+data class Repository(@Json(name = "id") val id: String)
 
-    }
-}
+@JsonClass(generateAdapter = true)
+data class Data(@Json(name = "project")  val repository: Repository)
 
-data class Repository(@SerializedName("id") val id: String)
-data class Data(@SerializedName("project")  val repository: Repository)
-data class MergeRequest(@SerializedName("id") val id: String,
-                        @SerializedName("iid") val iid: String,
-                        @SerializedName("project_id") val projectId: String,
-                        @SerializedName("title") val title: String) {
-    class Deserializer : ResponseDeserializable<MergeRequest> {
+@JsonClass(generateAdapter = true)
+data class MergeRequest(@Json(name = "id") val id: String,
+                        @Json(name = "iid") val iid: String,
+                        @Json(name = "project_id") val projectId: String,
+                        @Json(name = "title") val title: String)
 
-        override fun deserialize(content: String): MergeRequest? = Gson().fromJson(content, MergeRequest::class.java)
+val moshi = Moshi.Builder()
+        .add(KotlinJsonAdapterFactory())
+        .build()
+val adapterMR = moshi.adapter(MergeRequest::class.java)
+val adapterR = moshi.adapter(RepoResponse::class.java)
 
-    }
-}
+var adapter: JsonAdapter<Map<String, Any>> = moshi.adapter(Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java))
 
 val token = System.getenv("GITLAB_API_TOKEN")
 val urlGraph = "https://gitlab.solocal.com/api/graphql"
@@ -50,16 +51,17 @@ suspend fun getRepoID(path:String): List<String> {
             .authentication()
             .bearer(token)
             .body(reqRepo.toRequestString())
-            .awaitObjectResult(RepoResponse.Deserializer())
+
+            .awaitObjectResult(moshiDeserializerOf(adapterR))
             .fold(
                     { body ->
                         val repoPattern = ":.*/(\\d+)".toRegex()
-                        println(body.data)
+                        println(body)
                         val matches = repoPattern.find( body.data.repository.id)
                         val (repoId) = matches!!.destructured
                         listOf(repoId) },
                     { error ->
-                        println("An error of type ${error.exception} happened: ${error.message}")
+                        println("1/An error of type ${error.exception} happened: ${error.message}")
                         emptyList()
                     }
             )
@@ -80,19 +82,18 @@ suspend fun getRepoID(path:String): List<String> {
                         "remove_source_branch" to true)
 
                 val url = "$urlApi/$repoId/merge_requests"
-                println("Here $url")
-                println(Gson().toJson(prRequest))
+                println("Here ${adapter.toJson(prRequest)}")
                 println(".")
                 url.httpPost()
                         .header("content-type" to "application/json", "Accept" to "application/json")
                         .authentication()
                         .bearer(token)
-                        .body(Gson().toJson(prRequest))
-                        .awaitObjectResult(MergeRequest.Deserializer())
+                        .body(adapter.toJson(prRequest).toString())
+                        .awaitObjectResult(moshiDeserializerOf(adapterMR))
                         .fold(
                                 { body ->
                             val url = "$urlApi/$repoId/merge_requests/${body.iid}/notes"
-                            println(".")
+                            println("$url")
                             url.httpPost()
                                     .header("content-type" to "application/json", "Accept" to "application/json")
                                     .authentication()
@@ -100,7 +101,7 @@ suspend fun getRepoID(path:String): List<String> {
                                     .body("{\"body\":\"code review OK\"}")
                                     .responseString().toString()
                         },
-                                { error -> "An error of type ${error.exception} happened: ${error.message}" }
+                                { error -> "2/An error of type ${error.exception} happened: ${error.message}" }
                         )
             }
 }
