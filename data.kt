@@ -1,6 +1,8 @@
 import com.github.kittinunf.fuel.core.extensions.authentication
 import com.github.kittinunf.fuel.coroutines.awaitObjectResult
+import com.github.kittinunf.fuel.httpGet
 import com.github.kittinunf.fuel.httpPost
+import com.github.kittinunf.fuel.httpDelete
 import com.github.kittinunf.fuel.moshi.moshiDeserializerOf
 import com.squareup.moshi.*
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -22,13 +24,17 @@ data class MergeRequest(@Json(name = "id") val id: String,
                         @Json(name = "iid") val iid: String,
                         @Json(name = "project_id") val projectId: String,
                         @Json(name = "title") val title: String)
+                        
+
+@JsonClass(generateAdapter = true)
+data class Approval(@Json(name = "id")  val id: String)
 
 val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
 val adapterMR = moshi.adapter(MergeRequest::class.java)
 val adapterR = moshi.adapter(RepoResponse::class.java)
-
+val adapterApproval = moshi.adapter(List::class.java)
 var adapter: JsonAdapter<Map<String, Any>> = moshi.adapter(Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java))
 
 val token = System.getenv("GITLAB_API_TOKEN")
@@ -67,41 +73,81 @@ suspend fun getRepoID(path:String): List<String> {
             )
 }
 
- suspend fun createPullRequest(path:String, title: String, featBranch: String): List<String> {
+suspend fun updateRules(repoId: String,  mrId: String):  String {
 
-    return getRepoID(path)
-            .map{ repoId ->
-                if (repoId != null)
-                    println(repoId)
+    val approvals = "$urlApi/$repoId/merge_requests/${mrId}/approval_rules"
+    return approvals.httpGet()
+        .header(
+            "content-type" to "application/json",
+            "Accept" to "application/json"
+        )
+        .authentication()
+        .bearer(token)
+        .awaitObjectResult(moshiDeserializerOf(adapterApproval))
+        .fold({
+            println("RULES $it.")
 
-                val prRequest = mapOf("target_branch" to "develop",
-                        "source_branch" to featBranch,
-                        "id" to repoId,
-                        "title" to title,
-                        "approvals_before_merge" to 0,
-                        "remove_source_branch" to true)
-
-                val url = "$urlApi/$repoId/merge_requests"
-                println("Here ${adapter.toJson(prRequest)}")
-                println(".")
-                url.httpPost()
-                        .header("content-type" to "application/json", "Accept" to "application/json")
-                        .authentication()
-                        .bearer(token)
-                        .body(adapter.toJson(prRequest).toString())
-                        .awaitObjectResult(moshiDeserializerOf(adapterMR))
-                        .fold(
-                                { body ->
-                            val url = "$urlApi/$repoId/merge_requests/${body.iid}/notes"
-                            println("$url")
-                            url.httpPost()
-                                    .header("content-type" to "application/json", "Accept" to "application/json")
-                                    .authentication()
-                                    .bearer(token)
-                                    .body("{\"body\":\"code review OK\"}")
-                                    .responseString().toString()
-                        },
-                                { error -> "2/An error of type ${error.exception} happened: ${error.message}" }
-                        )
-            }
+            val url2 = "$approvals/${it}"
+            url2.httpDelete()
+                .header(
+                    "content-type" to "application/json",
+                    "Accept" to "application/json"
+                )
+                .authentication()
+                .bearer(token)
+                .responseString().toString()
+        },
+            { error -> "4/An error of type ${error.exception} happened: ${error.message}" })
 }
+
+ suspend fun createPullRequest(path:String, title: String, featBranch: String) {
+
+     getRepoID(path)
+         .map { repoId ->
+             if (repoId != null)
+                 println(repoId)
+
+             val prRequest = mapOf(
+                 "target_branch" to "develop",
+                 "source_branch" to featBranch,
+                 "id" to repoId,
+                 "title" to title,
+                 "approvals_before_merge" to 0,
+                 "remove_source_branch" to true
+             )
+
+             val url = "$urlApi/$repoId/merge_requests"
+             //    println("Here ${adapter.toJson(prRequest)}")
+             //    println(".")
+             url.httpPost()
+                 .header("content-type" to "application/json", "Accept" to "application/json")
+                 .authentication()
+                 .bearer(token)
+                 .body(adapter.toJson(prRequest).toString())
+                 .awaitObjectResult(moshiDeserializerOf(adapterMR))
+                 .fold(
+                     { body ->
+                         val url = "$urlApi/$repoId/merge_requests/${body.iid}/notes"
+                         println("body $body")
+                         url.httpPost()
+                             .header("content-type" to "application/json", "Accept" to "application/json")
+                             .authentication()
+                             .bearer(token)
+                             .body("{\"body\":\"code review OK\"}")
+                             .responseString { _, _, result ->
+                                 result.fold(
+                                     {
+                                         println("Notes $it")
+                                     },
+                                     { error -> "3/An error of type ${error.exception} happened: ${error.message}" }
+                                 ).also {
+
+                                 }.also { println("rules") }
+                             }
+
+                         updateRules(repoId = repoId, mrId = body.iid)
+                     },
+                     { error -> "2/An error of type ${error.exception} happened: ${error.message}" }
+                 )
+         }
+ }
